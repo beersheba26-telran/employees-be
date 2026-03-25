@@ -4,7 +4,7 @@ import app from "./controller/app.js"
 import employeesService from "./service/EmployeesServiceImpl.js"
 import seed_dev from "./development/seed_dev.js"
 const port = process.env.PORT || 3000
-const server = app.listen(port, () => logger.info(`server is listening on port ${port}`))
+const server = app.listen(port, () => console.log(`server is listening on port ${port}`))
 function shutdown() {
     logger.debug("shutdown has called")
     server.close(async() => {

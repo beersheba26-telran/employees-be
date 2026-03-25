@@ -41,10 +41,13 @@ class EmployeesServiceMap implements EmployeesService {
 
     }
     async updateEmployee(id: string, field: Partial<Employee>): Promise<Employee> {
-        delete field["id"] //make sure id isn't changed
+        delete field.id //make sure id isn't changed
         const empl: Employee = await this.getEmployee(id);
+        logger.debug(`employee with id "${empl.id}" to update`)
         this._flUpdate = true;
-        return Object.assign(empl, field)
+         Object.assign(empl, field);
+         logger.debug(`updated employee is ${JSON.stringify(empl)}`)
+         return empl;
     }
     async deleteEmployee(id: string): Promise<Employee> {
         const empl: Employee = await this.getEmployee(id);
@@ -54,7 +57,9 @@ class EmployeesServiceMap implements EmployeesService {
 
     }
     async getEmployee(id: string): Promise<Employee> {
-        const empl = this._employees.get(id);
+        logger.debug(`getting employee with id "${id}"`)
+        const empl = this._employees.get(id.trim());
+        logger.debug(`found employee with id "${empl?.id}"`)
         if(!empl) {
             throw new EmployeeNotFound(id)
         }
