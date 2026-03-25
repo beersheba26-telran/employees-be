@@ -7,7 +7,8 @@ import z, { ZodObject } from "zod"
         salary: z.number().min(5000, "Salary cannot be less than 5000")
         .max(50000, "Salary cannot be greater than 50000"),
         birthdate: z.iso.date(),
-        avatar: z.url().optional()
+        avatar: z.url().optional(),
+        department: z.string()
     }
 ).strict();
  const employeeUpdateSchema = employeeCreateSchema.omit({id: true, birthdate: true}).partial()
