@@ -1,10 +1,11 @@
-import express, {Request} from "express"
+import express, {Request, Response} from "express"
 import logger from "../logger.js"
 import employeesService from "../service/EmployeesServiceImpl.js";
 import { Employee } from "../models/Employee.js";
 import errorsHandler from "../middleware/errorsHandling.js";
 import corsMW from "../middleware/cors-middleware.js";
 import logger_http from "../middleware/logger_http.js";
+import { validation_create, validation_update } from "../middleware/validation-middleware.js";
 const app = express();
 app.use(corsMW)
 app.use(express.json());
@@ -14,12 +15,14 @@ app.get("/employees", async(req: Request<{},{},{},{department?: string}>, res) =
     logger.debug(`received ${employees.length} employee object`)
     res.json(employees)
 })
-app.post("/employees", async(req: Request<{},{}, Employee>, res) => {
+app.post("/employees", validation_create, async(req: Request<{},{}, Employee>,
+     res: Response) => {
     res.statusCode = 201;
     const empl = await employeesService.addEmployee(req.body)
     res.json(empl)
 })
-app.patch("/employees/:id", async(req: Request<{id: string},{}, Partial<Employee>>, res) => {
+app.patch("/employees/:id", validation_update, async(req: Request<{id: string},{}, Partial<Employee>>,
+     res: Response) => {
     logger.debug(`received query for updating employee with id "${req.params.id}"`)
     logger.debug(`updater is ${JSON.stringify(req.body)}`)
     const empl = await employeesService.updateEmployee(req.params.id.trim(), req.body)
