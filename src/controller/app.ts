@@ -3,8 +3,12 @@ import logger from "../logger.js"
 import employeesService from "../service/EmployeesServiceImpl.js";
 import { Employee } from "../models/Employee.js";
 import errorsHandler from "../middleware/errorsHandling.js";
+import corsMW from "../middleware/cors-middleware.js";
+import logger_http from "../middleware/logger_http.js";
 const app = express();
+app.use(corsMW)
 app.use(express.json());
+app.use(logger_http) //aspect logging
 app.get("/employees", async(req: Request<{},{},{},{department?: string}>, res) => {
     const employees: Employee[] = await employeesService.getAll(req.query.department);
     logger.debug(`received ${employees.length} employee object`)
