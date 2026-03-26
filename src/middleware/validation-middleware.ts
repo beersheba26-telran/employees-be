@@ -1,5 +1,7 @@
-import { RequestHandler, Request, Response } from "express";
-import z, { ZodObject } from "zod"
+import { RequestHandler } from "express";
+import z, { ZodError, ZodObject } from "zod"
+import ValidationError from "../errors/ValidationError.js";
+
  const employeeCreateSchema = z.object(
     {
         id:z.string().optional(),
@@ -14,7 +16,12 @@ import z, { ZodObject } from "zod"
  const employeeUpdateSchema = employeeCreateSchema.omit({id: true, birthdate: true}).partial()
  function validate (schema: ZodObject): RequestHandler {
     return (req, _, next) => {
-        req.body = schema.parse(req.body);
+        try {
+            req.body = schema.parse(req.body);
+        } catch (error) {
+            const zodError = error as ZodError
+            throw new ValidationError(zodError.issues.map(issue => `${issue.path}: ${issue.message}`).join(";"))
+        }
         next()
     }
  }

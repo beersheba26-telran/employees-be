@@ -5,10 +5,7 @@ export default function errorsHandler(error: Error, _: Request, res: Response, _
     if (error instanceof ServiceError) {
         res.statusCode = error.code;
         res.end(error.message);
-    } else if (error instanceof ZodError) {
-        res.statusCode = 400
-        res.end(error.issues.map(issue => `${issue.path}: ${issue.message}`).join(";"))
-    } else if ((error as any).status) {
+    }  else if ((error as any).status) {
         res.statusCode = (error as any).status;
         res.end(error.message)
     } else {
