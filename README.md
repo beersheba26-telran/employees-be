@@ -7,7 +7,7 @@
 - Why POST: because each time there will be issued different JWT and login data should be inside HTTP request
 - Zod validation of login data, 
 #### PATCH for updating password
-- Zod validation of new password syntax: minimal length is 8 characters
+- Zod validation is the same as for login
 #### DELETE for deleteing account
 ### Run sanity test 
 - Received token may be tested at site https://www.jwt.io/ 
