@@ -12,7 +12,7 @@ class AccountingServiceMap implements AccountingService {
     private _accounts: Map<string, Account> = new Map() ;
     private _filePath: string;
     rootUsername: string;
-    accountAdminRole: string;
+    accountAdminRole: string ;
     private _salt: number
     constructor () {
         this.rootUsername = process.env.ROOT_USERNAME || "root"
@@ -48,7 +48,7 @@ class AccountingServiceMap implements AccountingService {
     }
     async addAccount(username: string, passwordText: string, role: string): Promise<void> {
         this.checkUsername(username);
-        this._accounts.set(username, {username, role, password: await hash(passwordText, this._salt)})
+        this._accounts.set(username, {username, role, password: await hash(passwordText, this._salt as number)})
     }
     private checkUsername(username: string, isExist: boolean = true) {
         if (isExist && this._accounts.has(username)) {
