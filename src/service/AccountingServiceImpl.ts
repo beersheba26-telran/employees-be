@@ -6,6 +6,7 @@ import {writeFile} from "node:fs/promises"
 import {compare, hash} from "bcrypt-ts"
 import { AccountAlreadyExists, AccountingError, AccountNotFound } from "./shared/service-errors.js";
 import JwtUtil from "../utils/JwtUtil.js";
+import logger from "../logger.js";
 const DEFAULT_ACCOUNTS_FILE_PATH = "accounts-DataTransfer.txt"
 
 class AccountingServiceMap implements AccountingService {
@@ -13,31 +14,46 @@ class AccountingServiceMap implements AccountingService {
     private _filePath: string;
     rootUsername: string;
     accountAdminRole: string ;
+    private _flUpdate: boolean = false
     private _salt: number
     constructor () {
         this.rootUsername = process.env.ROOT_USERNAME || "root"
         this.accountAdminRole = process.env.ACCOUNT_ADMIN_ROLE || "ACCOUNTS_ADMIN"
         this._filePath = process.env.ACCOUNTS_FILE_PATH || DEFAULT_ACCOUNTS_FILE_PATH
         this._salt = +(process.env.SALT || 12)
+        logger.debug(`config of AccountingService: rootUserName is ${this.rootUsername}\
+            \naccountAdminRole is ${this.accountAdminRole}\
+            \nfilePath is ${this._filePath}\
+            \nsalt is ${this._salt}`)
         this._load()
         this._setRootAccount()
-        
 
     }
     private _setRootAccount() {
         this.addAccount(this.rootUsername, process.env.ROOT_PASSWORD!, this.accountAdminRole)
+        logger.debug(`root account has been set`)
+        this._flUpdate = false;
     }
     private _load() {
        if (existsSync(this._filePath)) {
         const accountsJSON = readFileSync(this._filePath, {encoding: "utf8"})
         const accounts: Array<Account> = JSON.parse(accountsJSON)
         accounts.forEach(acc => this._accounts.set(acc.username, acc))
+        logger.debug(`${accounts.length} accounts are restored`)
+       } else {
+        logger.debug(`file with accounts doesn't exist`)
        }
+       this._flUpdate = false;
     }
     public async save(): Promise<void> {
-       const accounts: Array<Account> =
-        Array.from(this._accounts.values()).filter(acc => acc.username != this.rootUsername)
-        await writeFile(this._filePath, JSON.stringify(accounts), {encoding: "utf8"})
+       if (this._flUpdate) {
+        const accounts: Array<Account> =
+         Array.from(this._accounts.values()).filter(acc => acc.username != this.rootUsername)
+         await writeFile(this._filePath, JSON.stringify(accounts), {encoding: "utf8"})
+         logger.debug(`${accounts.length} accounts has been saved`)
+       } else {
+        logger.debug(`accounts are not changed and not saved`)
+       }
     }
     async getToken(username: string, password: string): Promise<User> {
        const account = this._accounts.get(username);
@@ -49,6 +65,8 @@ class AccountingServiceMap implements AccountingService {
     async addAccount(username: string, passwordText: string, role: string): Promise<void> {
         this.checkUsername(username);
         this._accounts.set(username, {username, role, password: await hash(passwordText, this._salt as number)})
+        logger.debug(`account ${username} added`)
+        this._flUpdate = true
     }
     private checkUsername(username: string, isExist: boolean = true) {
         if (isExist && this._accounts.has(username)) {
@@ -62,10 +80,16 @@ class AccountingServiceMap implements AccountingService {
     async deleteAccount(username: string): Promise<void> {
         this.checkUsername(username, false)
         this._accounts.delete(username)
+        logger.debug(`account ${username} deleted`)
+        this._flUpdate = true
     }
     async updatePassword(username: string, newPassword: string): Promise<void> {
        this.checkUsername(username, false)
-       Object.assign( this._accounts.get(username)!, {password: await hash(newPassword, this._salt)});
+       const account = this._accounts.get(username)!
+       logger.debug(`account ${username}; old password ${account.password}`)
+       Object.assign(account, {password: await hash(newPassword, this._salt)});
+        logger.debug(`account ${username}; new password ${account.password}`);
+        this._flUpdate =true
        
     }
     
