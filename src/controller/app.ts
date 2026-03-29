@@ -9,7 +9,9 @@ import { validation_create, validation_create_account, validation_login, validat
 import accountingService from "../service/AccountingServiceImpl.js";
 import { LoginData } from "../models/LoginData.js";
 import { Account } from "../models/Account.js";
+import { security_context } from "../middleware/auth.js";
 const app = express();
+app.use(security_context)
 app.use(corsMW)
 app.use(express.json());
 app.use(logger_http) //aspect logging
