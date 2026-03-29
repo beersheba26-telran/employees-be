@@ -11,35 +11,13 @@ import { LoginData } from "../models/LoginData.js";
 import { Account } from "../models/Account.js";
 import { security_context, auth } from "../middleware/auth.js";
 import { PermissionError } from "../errors/authErrors.js";
+import employeesRouter from "./routes/employeesRouter.js";
 const app = express();
 app.use(security_context)
 app.use(corsMW)
 app.use(express.json());
 app.use(logger_http) //aspect logging
-app.get("/employees", auth(),async(req: Request<{},{},{},{department?: string}>, res: Response) => {
-    const employees: Employee[] = await employeesService.getAll(req.query.department);
-    logger.debug(`received ${employees.length} employee object`)
-    res.json(employees)
-})
-app.post("/employees", auth("ADMIN"), validation_create, async(req: Request<{},{}, Employee>,
-     res: Response) => {
-    res.statusCode = 201;
-    const empl = await employeesService.addEmployee(req.body)
-    res.json(empl)
-})
-app.patch("/employees/:id", auth("ADMIN", accountingService.accountAdminRole), validation_update, async(req: Request<{id: string},{}, Partial<Employee>>,
-     res: Response) => {
-    logger.debug(`received query for updating employee with id "${req.params.id}"`)
-    logger.debug(`updater is ${JSON.stringify(req.body)}`)
-    const empl = await employeesService.updateEmployee(req.params.id.trim(), req.body)
-    res.json(empl)
-})
-app.delete("/employees/:id", auth("ADMIN"),async(req: Request<{id: string}>, res) => {
-    logger.debug(`received query for deleting employee with id "${req.params.id}"`)
-    const empl = await employeesService.deleteEmployee(req.params.id.trim())
-    logger.debug(`employee with id "${empl.id} deleted"`)
-    res.json(empl)
-})
+app.use("/employees", employeesRouter)
 app.post("/accounts/login", validation_login, async (req: Request<{}, {}, LoginData>, res: Response) => {
     const {username, password} = req.body;
     const user = await accountingService.getToken(username, password)
