@@ -2,6 +2,7 @@ import { RequestHandler, Request, Response, NextFunction } from "express";
 import logger from "../logger.js";
 import JwtUtil from "../utils/JwtUtil.js";
 import { JsonWebTokenError, JwtPayload } from "jsonwebtoken";
+import { JwtError, AuthenticationError, PermissionError } from "../errors/authErrors.js";
 const BEARER = "Bearer "
 export const security_context: RequestHandler = (req, res, next) => {
     const authHeader = req.header("AUthorization")
@@ -28,4 +29,18 @@ function parseToken(token: string): {username: string|null, role: string|null, a
     }
     return {username: payload.sub!, role: payload.role, auth_error}
    
+}
+export function auth(...roles: string[]): RequestHandler {
+    return (req: Request, res: Response, next: NextFunction) => {
+        if (req.auth_error) {
+            throw new JwtError(req.auth_error)
+        }
+        if (!req.username) {
+            throw new AuthenticationError()
+        }
+        if (!req.role || (roles.length != 0 && !roles.includes(req.role))) {
+            throw new PermissionError()
+        }
+        next()
+    }
 }
