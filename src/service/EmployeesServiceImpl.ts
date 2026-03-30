@@ -1,86 +1,91 @@
 import { Employee } from "../models/Employee.js";
 import EmployeesService from "./EmployeesService.js";
-import path from "node:path";
-import {existsSync, readFileSync} from "node:fs"
-import {writeFile} from "node:fs/promises"
+import knex, { Knex } from "knex"
 import { getId } from "./shared/helper.js";
-import { EmployeeAlreadyExists, EmployeeNotFound } from "./shared/service-errors.js";
+import {
+  EmployeeAlreadyExists,
+  EmployeeNotFound,
+} from "./shared/service-errors.js";
 import logger from "../logger.js";
-const DEFAULT_FILE_NAME = "employees-data.txt"
-class EmployeesServiceMap implements EmployeesService {
-    private _employees: Map<string, Employee> = new Map();
-    private _filePath: string
-    constructor(private _flUpdate: boolean = false) {
-            this._filePath = path.resolve(
-                process.cwd(),
-                process.env.EMPLOYEES_FILE_NAME || DEFAULT_FILE_NAME
-            )
-            this._load()
+const DEFAULT_FILE_NAME = "employees-data.sqlite";
+const TABLE_NAME ="employees"
+class EmployeesServiceSQL implements EmployeesService {
+    _db: Knex
+    constructor(config: Knex.Config) {
+        this._db = knex(config)
     }
-    private _load() {
-        if (existsSync(this._filePath)) {
-            const employeesJSON = readFileSync(this._filePath, {encoding: "utf8"})
-            const employees: Employee[] = JSON.parse(employeesJSON)
-            employees.forEach(empl => this.addEmployee(empl))
-            logger.debug(`${employees.length} employee objects have been restored`)
-            this._flUpdate = false;
+    async createTable(): Promise<void> {
+        const exists = await this._db.schema.hasTable(TABLE_NAME)
+        if (!exists) {
+            logger.debug(`Table ${TABLE_NAME} doesn't exist so will be created`)
+            await this._db.schema.createTable(TABLE_NAME, table => {
+                table.string('id').primary();
+                table.string('fullName');
+                table.string('department');
+                table.string('avatar').defaultTo("");
+                table.integer('salary');
+                table.string('birthdate');
+                table.index(["department"])
+            })
+            logger.debug(`Table ${TABLE_NAME} created`)
         } else {
-            logger.debug("employees are not restored as file doesn't exist")
+            logger.debug(`Table ${TABLE_NAME} already exists`)
         }
     }
-    async addEmployee(empl: Employee): Promise<Employee> {
-        if (!empl.id) {
-            empl.id = getId();
-        }
-        if (this._employees.has(empl.id)) {
-            throw new EmployeeAlreadyExists(empl.id)
-        }
-        this._employees.set(empl.id, empl)
-        this._flUpdate = true;
-        return empl
-
+  async addEmployee(empl: Employee): Promise<Employee> {
+    if (!empl.id) {
+        empl.id = getId()
     }
-    async updateEmployee(id: string, field: Partial<Employee>): Promise<Employee> {
-        delete field.id //make sure id isn't changed
-        const empl: Employee = await this.getEmployee(id);
-        logger.debug(`employee with id "${empl.id}" to update`)
-        this._flUpdate = true;
-         Object.assign(empl, field);
-         logger.debug(`updated employee is ${JSON.stringify(empl)}`)
-         return empl;
+    try {
+        await this._db<Employee>(TABLE_NAME).insert(empl)
+    } catch (error) {
+        throw new EmployeeAlreadyExists(empl.id)
     }
-    async deleteEmployee(id: string): Promise<Employee> {
-        const empl: Employee = await this.getEmployee(id);
-        this._employees.delete(id);
-        this._flUpdate = true;
-        return empl;
-
+    logger.debug(`employee with id ${empl.id} has been added`)
+    return empl
+  }
+  async updateEmployee(
+    id: string,
+    field: Partial<Employee>,
+  ): Promise<Employee> {
+    const res = await this._db<Employee>(TABLE_NAME).where({id}).update(field);
+    if(!res) {
+        throw new EmployeeNotFound(id)
     }
-    async getEmployee(id: string): Promise<Employee> {
-        logger.debug(`getting employee with id "${id}"`)
-        const empl = this._employees.get(id.trim());
-        logger.debug(`found employee with id "${empl?.id}"`)
-        if(!empl) {
-            throw new EmployeeNotFound(id)
-        }
-        return empl;
+    logger.debug(`employee with id ${id} has been updated with fields ${JSON.stringify(field)}`)
+    return await this.getEmployee(id)
+  }
+  async deleteEmployee(id: string): Promise<Employee> {
+    const empl = await this.getEmployee(id)
+    await this._db<Employee>(TABLE_NAME).where({id}).delete()
+    logger.debug(`deleted employee with id ${id}`)
+    return empl;
+  }
+  async getEmployee(id: string): Promise<Employee> {
+    const empl = await this._db<Employee>(TABLE_NAME).where({id}).first()
+    if (!empl) {
+        throw new EmployeeNotFound(id)
     }
-    async getAll(department?: string): Promise<Employee[]> {
-        const employees: Employee[] = Array.from(this._employees.values())
-        return department ? employees.filter(empl => empl.department === department): employees
+    return empl;
+  }
+  async getAll(department?: string): Promise<Employee[]> {
+    const query = this._db<Employee>(TABLE_NAME)
+    if (department) {
+        query.where({department})
     }
-    async save(): Promise<void> {
-
-        if (this._flUpdate) {
-            const employees: Employee[] = Array.from(this._employees.values())
-            await writeFile(this._filePath, JSON.stringify(employees), {encoding:"utf8"})
-            this._flUpdate = false;
-            logger.debug(`${employees.length} employee objects have been saved into ${this._filePath}`)
-        } else {
-            logger.debug("Employees are not saved because not updated")
-        }
-    }
-    
+    return await query
+  }
+  async save(): Promise<void> {
+    await this._db.destroy()
+    logger.debug("connection with DB is closed")
+  }
 }
-const employeesService:EmployeesService = new EmployeesServiceMap();
-export default employeesService
+
+const employeesService: EmployeesService = new EmployeesServiceSQL({
+    client: "sqlite3",
+    connection: {
+        filename: process.env.SQLITE_FILE_NAME || DEFAULT_FILE_NAME
+    }
+});
+await (employeesService as EmployeesServiceSQL).createTable()
+export default employeesService;
