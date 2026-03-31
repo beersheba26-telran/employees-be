@@ -1,99 +1,77 @@
 import { Employee } from "../models/Employee.js";
 import EmployeesService from "./EmployeesService.js";
-import knex, { Knex } from "knex";
+import {MongoClient, Db, Collection} from "mongodb"
 import { getId } from "./shared/helper.js";
 import {
   EmployeeAlreadyExists,
   EmployeeNotFound,
 } from "./shared/service-errors.js";
 import logger from "../logger.js";
-const DEFAULT_FILE_NAME = "employees-data.sqlite";
-const TABLE_NAME = "employees";
-class EmployeesServiceSQL implements EmployeesService {
-  _db: Knex;
-  constructor(config: Knex.Config) {
-    this._db = knex(config);
+
+const COLLECTION_NAME = process.env.MONGO_COLLECTION_NAME || "employees";
+const DB_NAME = process.env.MONGO_DB_NAME || "employees-db"
+const USER = process.env.MONGO_USER || "root"
+const PASSWORD = process.env.MONGO_PASSWORD
+const URI =`mongodb+srv://${USER}:${PASSWORD}@cluster0.nxjwscr.mongodb.net/?appName=Cluster0`
+class EmployeesServiceMongo implements EmployeesService {
+  private _client: MongoClient;
+  private _db: Db | undefined;
+  private _collection: Collection<Employee> | undefined
+  constructor() {
+      this._client = new MongoClient(URI)
+      
   }
-  async createTable(): Promise<void> {
-    const exists = await this._db.schema.hasTable(TABLE_NAME);
-    if (!exists) {
-      logger.debug(`Table ${TABLE_NAME} doesn't exist so will be created`);
-      await this._db.schema.createTable(TABLE_NAME, (table) => {
-        table.string("id").primary();
-        table.string("fullName");
-        table.string("department");
-        table.string("avatar").defaultTo("");
-        table.integer("salary");
-        table.string("birthdate");
-        table.index(["department"]);
-      });
-      logger.debug(`Table ${TABLE_NAME} created`);
-    } else {
-      logger.debug(`Table ${TABLE_NAME} already exists`);
-    }
+  async init(): Promise<void> {
+      await this._client.connect();
+      this._db = this._client.db(DB_NAME)
+      this._collection = this._db.collection(COLLECTION_NAME)
+      this._collection.createIndex({id: 1}, {unique: true})
+      this._collection.createIndex({department: "hashed"}, {unique:false})
   }
-  async addEmployee(empl: Employee): Promise<Employee> {
-    if (!empl.id) {
-      empl.id = getId();
+ async addEmployee(empl: Employee): Promise<Employee> {
+    if(!empl.id) {
+      empl.id = getId()
     }
     try {
-      await this._db<Employee>(TABLE_NAME).insert(empl);
+      await this._collection?.insertOne(empl)
     } catch (error) {
-      throw new EmployeeAlreadyExists(empl.id);
+       throw new EmployeeAlreadyExists(empl.id)
     }
-    logger.debug(`employee with id ${empl.id} has been added`);
     return empl;
   }
-  async updateEmployee(
-    id: string,
-    field: Partial<Employee>,
-  ): Promise<Employee> {
-    const res = await this._db<Employee>(TABLE_NAME)
-      .where({ id })
-      .update(field);
-    if (!res) {
-      throw new EmployeeNotFound(id);
+  async updateEmployee(id: string, fields: Partial<Employee>): Promise<Employee> {
+    const empl = await this._collection?.findOneAndUpdate (
+      {id},
+      {$set: fields},
+      {returnDocument: "after"}
+    )
+    if(!empl) {
+      throw new EmployeeNotFound(id)
     }
-    logger.debug(
-      `employee with id ${id} has been updated with fields ${JSON.stringify(field)}`,
-    );
-    return await this.getEmployee(id);
+    return empl
   }
   async deleteEmployee(id: string): Promise<Employee> {
-    const empl = await this.getEmployee(id);
-    await this._db<Employee>(TABLE_NAME).where({ id }).delete();
-    logger.debug(`deleted employee with id ${id}`);
-    return empl;
+    const empl = await this._collection?.findOneAndDelete({id})
+    if (!empl) {
+      throw new EmployeeNotFound(id)
+    }
+    return empl
   }
   async getEmployee(id: string): Promise<Employee> {
-    const empl = await this._db<Employee>(TABLE_NAME).where({ id }).first();
+    const empl = await this._collection?.findOne({id})
     if (!empl) {
-      throw new EmployeeNotFound(id);
+      throw new EmployeeNotFound(id)
     }
-    return empl;
+    return empl
   }
   async getAll(department?: string): Promise<Employee[]> {
-    const query = this._db<Employee>(TABLE_NAME);
-    if (department) {
-      query.where({ department });
-    }
-    return await query;
+    const filter: object = department ? {department} : {};
+    return await this._collection!.find(filter).toArray()
   }
   async save(): Promise<void> {
-    await this._db.destroy();
-    logger.debug("connection with DB is closed");
+    await this._client.close()
   }
 }
-
-const employeesService: EmployeesService = new EmployeesServiceSQL({
-  client: "pg",
-  connection: {
-    host: "aws-1-ap-northeast-2.pooler.supabase.com",
-    port: 5432,
-    database: "postgres",
-    user: "postgres.cdhdwagtnlmssbchbhag",
-    password: "<your password>",
-  },
-});
-await (employeesService as EmployeesServiceSQL).createTable();
+ const employeesService: EmployeesService = new  EmployeesServiceMongo()
+ await (employeesService as EmployeesServiceMongo).init()
 export default employeesService;
