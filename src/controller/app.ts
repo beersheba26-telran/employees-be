@@ -10,6 +10,9 @@ app.use(security_context)
 app.use(corsMW)
 app.use(express.json());
 app.use(logger_http) //aspect logging
+app.get("/health", (req, res) => {
+    res.json({status: "ok"})
+})
 app.use("/employees", employeesRouter)
 app.use("/accounts", accountsRouter)
 app.use(errorsHandler)
